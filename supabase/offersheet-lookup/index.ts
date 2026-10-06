@@ -1,16 +1,16 @@
 // offersheet-lookup — READ-ONLY lookup of o2i rows by tracking code.
 // Deployed to the o2i Supabase project (chebtjqheqnrnjgbixza) as an Edge Function (verify_jwt: false).
-// Only SELECTs. Caller must be signed in to the OMS portal with a company email.
-const OMS_URL = "https://hnujfsoqrhfiedztqvdm.supabase.co";
+// Only SELECTs. Caller must be signed in (o2i project's Google login) with a company email.
 const DOMAIN = "@usawholesalesupplies.com";
 const ALLOWED_ORIGINS = ["https://kennyblas.github.io"];
 const DB_URL = Deno.env.get("SUPABASE_URL")!;
 const DB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 function cors(origin: string) {
   return {
     "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
-    "Access-Control-Allow-Headers": "content-type, x-oms-token, x-oms-key, authorization, apikey, x-client-info",
+    "Access-Control-Allow-Headers": "content-type, x-user-token, authorization, apikey, x-client-info",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
@@ -32,11 +32,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: h });
   if (req.method !== "POST") return json({ error: "POST only" }, 405, h);
 
-  // 1) Verify the OMS portal login
-  const token = req.headers.get("x-oms-token") || "";
-  const omsKey = req.headers.get("x-oms-key") || "";
-  if (!token || !omsKey) return json({ error: "Not signed in" }, 401, h);
-  const u = await fetch(`${OMS_URL}/auth/v1/user`, { headers: { apikey: omsKey, Authorization: `Bearer ${token}` } });
+  // 1) Verify the signed-in user (o2i project's own login)
+  const token = req.headers.get("x-user-token") || "";
+  if (!token) return json({ error: "Not signed in" }, 401, h);
+  const u = await fetch(`${DB_URL}/auth/v1/user`, { headers: { apikey: ANON_KEY, Authorization: `Bearer ${token}` } });
   if (!u.ok) return json({ error: "Session expired — sign in again" }, 401, h);
   const user = await u.json();
   if (!String(user?.email || "").toLowerCase().endsWith(DOMAIN)) return json({ error: "Company email required" }, 403, h);
