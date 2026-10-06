@@ -70,11 +70,11 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     "Recommended Sellable Qty","90Days Average","Status","Notes","Bundle Size","ROI %","Profit Per Unit","30D Profit","Brand","Distributor"];
   var SHEET = [];
 
-  if(!C.OMS_PUBLISHABLE_KEY || /PASTE/.test(C.OMS_PUBLISHABLE_KEY)){
-    $('loginMsg').innerHTML = '<span class="err">Setup needed: paste the OMS publishable key into config.js.</span>';
+  if(!C.O2I_PUBLISHABLE_KEY || /PASTE/.test(C.O2I_PUBLISHABLE_KEY)){
+    $('loginMsg').innerHTML = '<span class="err">Setup needed: paste the o2i publishable key into config.js.</span>';
     $('googleBtn').disabled = true; return;
   }
-  var sb = supabase.createClient(C.OMS_URL, C.OMS_PUBLISHABLE_KEY);
+  var sb = supabase.createClient(C.O2I_URL, C.O2I_PUBLISHABLE_KEY);
   var session = null;
   var okEmail = function(e){return String(e||'').toLowerCase().endsWith('@'+C.DOMAIN);};
 
@@ -137,7 +137,7 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     codes = codes.filter(function(c,i){return codes.indexOf(c)===i;});
     if(!codes.length){$('msg').innerHTML='<span class="err">Paste at least one tracking code.</span>';return;}
     $('goBtn').disabled=true; $('dlBtn').disabled=true; $('msg').textContent='Looking up '+codes.length+' code(s)…';
-    fetch(C.LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json','x-oms-token':session.access_token,'x-oms-key':C.OMS_PUBLISHABLE_KEY},body:JSON.stringify({codes:codes})})
+    fetch(C.LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json','x-user-token':session.access_token},body:JSON.stringify({codes:codes})})
       .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
       .then(function(res){
         if(!res.ok) throw new Error(res.j.error||'Lookup failed');
