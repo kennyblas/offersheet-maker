@@ -1,9 +1,9 @@
-// ONE-TIME SETUP: paste the OMS Clone project's *publishable* key below.
-// Supabase dashboard -> project "OMS Clone" -> Project Settings -> API Keys -> "Publishable key" (starts with sb_publishable_).
-// This key is designed to be public (the OMS portal already ships it in its page). Never paste a secret/service_role key here.
+// ONE-TIME SETUP: paste the o2i project's *publishable* key below.
+// Supabase dashboard -> project "New Joe's O2i Clone Version" -> Project Settings -> API Keys -> "Publishable key" (starts with sb_publishable_).
+// This key is designed to be public. Never paste a secret / service_role key here.
 window.OFFERSHEET_CONFIG = {
-  OMS_URL: "https://hnujfsoqrhfiedztqvdm.supabase.co",
-  OMS_PUBLISHABLE_KEY: "sb_publishable_r0_yxI5qhUlkBPhJjePn7Q_rglPQPDC",
+  O2I_URL: "https://chebtjqheqnrnjgbixza.supabase.co",
+  O2I_PUBLISHABLE_KEY: "PASTE_PUBLISHABLE_KEY_HERE",
   LOOKUP_URL: "https://chebtjqheqnrnjgbixza.supabase.co/functions/v1/offersheet-lookup",
   DOMAIN: "usawholesalesupplies.com"
 };
