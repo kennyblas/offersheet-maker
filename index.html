@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offer Sheet Maker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<style>
+:root{--bg:#0b0f17;--card:#121826;--line:#1f2937;--text:#e5e7eb;--mute:#94a3b8;--acc:#14b8a6;--accd:#0f766e;--bad:#f87171;--warn:#fbbf24;--good:#34d399}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 16px}
+h1{font-size:22px;margin:0}.sub{color:var(--mute);font-size:13px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+button{background:var(--acc);color:#04201d;border:0;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer;font-size:14px}
+button:hover{background:#2dd4bf}button:disabled{opacity:.5;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+textarea{width:100%;min-height:180px;background:#0b111c;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.msg{font-size:13px}.err{color:var(--bad)}.ok{color:var(--good)}.warn{color:var(--warn)}
+.tbl{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
+.pill{padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.p-Profitable{background:#064e3b;color:#6ee7b7}.p-Low{background:#78350f;color:#fcd34d}.p-Not{background:#7f1d1d;color:#fca5a5}
+#login{text-align:center;padding:48px 18px}#app{display:none}
+.kpis{display:flex;gap:12px;flex-wrap:wrap}.kpi{background:#0b111c;border:1px solid var(--line);border-radius:8px;padding:8px 14px}.kpi b{font-size:18px;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Offer Sheet Maker</h1><div class="sub">Paste o2i tracking codes → download a Manual Offer Sheet</div></div>
+    <div id="who" class="sub"></div>
+  </header>
+
+  <div id="login" class="card">
+    <p>Sign in with your <b>@usawholesalesupplies.com</b> Google account.</p>
+    <button id="googleBtn">Sign in with Google</button>
+    <p id="loginMsg" class="msg"></p>
+  </div>
+
+  <div id="app">
+    <div class="card">
+      <label for="codes"><b>Tracking codes</b> <span class="sub">— one per line (commas or spaces also work)</span></label>
+      <textarea id="codes" placeholder="2026-1001-167&#10;2026-1001-168&#10;2026-1001-169"></textarea>
+      <div class="row">
+        <button id="goBtn">Look up</button>
+        <button id="dlBtn" class="ghost" disabled>Download .xlsx</button>
+        <button id="clearBtn" class="ghost">Clear</button>
+        <span id="msg" class="msg"></span>
+      </div>
+    </div>
+    <div id="result" class="card" style="display:none">
+      <div class="kpis" id="kpis"></div>
+      <p id="missing" class="msg warn"></p>
+      <div class="tbl"><table id="tbl"></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var C = window.OFFERSHEET_CONFIG || {};
+  var $ = function(id){return document.getElementById(id);};
+  var HEADERS = ["Store Code","Tracking Code","ASIN","ASIN Eligible","ASIN Desired","Total Price","UPC","Unit Cost",
+    "Recommended Sellable Qty","90Days Average","Status","Notes","Bundle Size","ROI %","Profit Per Unit","30D Profit","Brand","Distributor"];
+  var SHEET = [];
+
+  if(!C.OMS_PUBLISHABLE_KEY || /PASTE/.test(C.OMS_PUBLISHABLE_KEY)){
+    $('loginMsg').innerHTML = '<span class="err">Setup needed: paste the OMS publishable key into config.js.</span>';
+    $('googleBtn').disabled = true; return;
+  }
+  var sb = supabase.createClient(C.OMS_URL, C.OMS_PUBLISHABLE_KEY);
+  var session = null;
+  var okEmail = function(e){return String(e||'').toLowerCase().endsWith('@'+C.DOMAIN);};
+
+  function show(s){
+    session = s;
+    if(s && okEmail(s.user.email)){
+      $('login').style.display='none'; $('app').style.display='block';
+      $('who').innerHTML = s.user.email + ' · <a href="#" id="out" style="color:var(--acc)">Sign out</a>';
+      $('out').onclick = function(e){e.preventDefault(); sb.auth.signOut().then(function(){location.reload();});};
+    } else {
+      if(s){ sb.auth.signOut(); $('loginMsg').innerHTML='<span class="err">Use your @'+C.DOMAIN+' account.</span>'; }
+      $('login').style.display='block'; $('app').style.display='none'; $('who').textContent='';
+    }
+  }
+  sb.auth.getSession().then(function(r){show(r.data && r.data.session);});
+  sb.auth.onAuthStateChange(function(_e, s){show(s);});
+
+  $('googleBtn').onclick = function(){
+    sb.auth.signInWithOAuth({provider:'google', options:{redirectTo: location.origin + location.pathname,
+      queryParams:{hd:C.DOMAIN, prompt:'select_account'}}});
+  };
+
+  var n = function(v){ if(v===null||v===undefined||v==='') return ''; var x=Number(v); return isNaN(x)?'':x; };
+  var r2 = function(x){ return Math.round(x*100)/100; };
+
+  function build(rec){
+    var uc=n(rec.unit_price), bs=n(rec.bundle_size)||1, oq=n(rec.order_quantity), ppu=n(rec.profit);
+    var rq = oq===''? '' : r2(oq/bs);
+    var p30 = (ppu===''||rq==='')? '' : r2(ppu*rq);
+    var tp = (uc===''||oq==='')? '' : r2(uc*oq);
+    var roi = rec.roi===null||rec.roi===undefined||rec.roi===''? '' : Math.round(Number(rec.roi)*100);
+    var st, nt;
+    if(p30===''){st='';nt='';}
+    else if(p30<=0){st='Not Profitable';nt='Negative ROI';}
+    else if(p30<40){st='Low Profit';nt='Low Profit';}
+    else {st='Profitable';nt='Good to Order';}
+    var o = {"Store Code":rec.store_code||'',"Tracking Code":rec.tracking_code,"ASIN":rec.asin||'',"ASIN Eligible":"true","ASIN Desired":"true",
+      "Total Price":tp,"UPC":rec.upc==null?'':String(rec.upc),"Unit Cost":uc,"Recommended Sellable Qty":rq,"90Days Average":n(rec.target_sell_price),
+      "Status":st,"Notes":nt,"Bundle Size":n(rec.bundle_size),"ROI %":roi,"Profit Per Unit":ppu,"30D Profit":p30,"Brand":rec.brand||'',"Distributor":rec.distributor_name||''};
+    return o;
+  }
+
+  function render(missing){
+    var t = '<tr>'+HEADERS.map(function(h){return '<th>'+h+'</th>';}).join('')+'</tr>';
+    SHEET.forEach(function(o){
+      t += '<tr>'+HEADERS.map(function(h){
+        var v=o[h]; if(h==='Status'&&v) return '<td><span class="pill p-'+v.split(' ')[0]+'">'+v+'</span></td>';
+        return '<td>'+String(v).replace(/[<&]/g,function(c){return c==='<'?'&lt;':'&amp;';})+'</td>';}).join('')+'</tr>';
+    });
+    $('tbl').innerHTML = t;
+    var c = function(s){return SHEET.filter(function(o){return o.Status===s;}).length;};
+    var tot = SHEET.reduce(function(a,o){return a+(Number(o['Total Price'])||0);},0);
+    $('kpis').innerHTML = '<div class="kpi"><b>'+SHEET.length+'</b>rows</div><div class="kpi"><b>'+c('Profitable')+'</b>Profitable</div><div class="kpi"><b>'+c('Low Profit')+'</b>Low Profit</div><div class="kpi"><b>'+c('Not Profitable')+'</b>Not Profitable</div><div class="kpi"><b>$'+tot.toLocaleString(undefined,{maximumFractionDigits:2})+'</b>Total Price</div>';
+    $('missing').textContent = missing.length ? ('Not found in o2i ('+missing.length+'): '+missing.join(', ')) : '';
+    $('result').style.display='block';
+  }
+
+  $('goBtn').onclick = function(){
+    var codes = $('codes').value.split(/[\s,;]+/).map(function(s){return s.trim();}).filter(Boolean);
+    codes = codes.filter(function(c,i){return codes.indexOf(c)===i;});
+    if(!codes.length){$('msg').innerHTML='<span class="err">Paste at least one tracking code.</span>';return;}
+    $('goBtn').disabled=true; $('dlBtn').disabled=true; $('msg').textContent='Looking up '+codes.length+' code(s)…';
+    fetch(C.LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json','x-oms-token':session.access_token,'x-oms-key':C.OMS_PUBLISHABLE_KEY},body:JSON.stringify({codes:codes})})
+      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+      .then(function(res){
+        if(!res.ok) throw new Error(res.j.error||'Lookup failed');
+        var order = {}; codes.forEach(function(c,i){order[c]=i;});
+        var rows = res.j.rows.sort(function(a,b){return order[a.tracking_code]-order[b.tracking_code];});
+        SHEET = rows.map(build);
+        render(res.j.missing||[]);
+        $('dlBtn').disabled = !SHEET.length;
+        $('msg').innerHTML = '<span class="ok">Found '+SHEET.length+' row(s).</span>';
+      })
+      .catch(function(e){$('msg').innerHTML='<span class="err">'+e.message+'</span>';})
+      .finally(function(){$('goBtn').disabled=false;});
+  };
+
+  $('dlBtn').onclick = function(){
+    var aoa = [HEADERS].concat(SHEET.map(function(o){return HEADERS.map(function(h){return o[h];});}));
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    var upc = HEADERS.indexOf('UPC');
+    for(var r=1;r<aoa.length;r++){var cell=ws[XLSX.utils.encode_cell({r:r,c:upc})]; if(cell){cell.t='s';cell.z='@';}}
+    ws['!cols'] = HEADERS.map(function(h){return {wch:Math.max(11,h.length+2)};});
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Offer Sheet');
+    var d = new Date(), p=function(x){return String(x).padStart(2,'0');};
+    XLSX.writeFile(wb, 'Manual_Offer_Sheet_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'.xlsx');
+  };
+  $('clearBtn').onclick = function(){ $('codes').value=''; SHEET=[]; $('result').style.display='none'; $('dlBtn').disabled=true; $('msg').textContent=''; };
+})();
+</script>
+</body>
+</html>
