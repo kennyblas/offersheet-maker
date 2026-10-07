@@ -113,7 +113,7 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     else {st='Profitable';nt='Good to Order';}
     var o = {"Store Code":rec.store_code||'',"Tracking Code":rec.tracking_code,"ASIN":rec.asin||'',"ASIN Eligible":"true","ASIN Desired":"true",
       "Total Price":tp,"UPC":rec.upc==null?'':String(rec.upc),"Unit Cost":uc,"Recommended Sellable Qty":rq,"90Days Average":n(rec.target_sell_price),
-      "Status":st,"Notes":nt,"Bundle Size":n(rec.bundle_size),"ROI %":roi,"Profit Per Unit":ppu,"30D Profit":p30,"Brand":rec.brand||'',"Distributor":rec.distributor_name||''};
+      "Status":st,"Notes":nt,"Bundle Size":n(rec.bundle_size),"ROI %":(roi===""?"":roi+"%"),"Profit Per Unit":ppu,"30D Profit":p30,"Brand":rec.brand||'',"Distributor":rec.distributor_name||''};
     return o;
   }
 
