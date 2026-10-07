@@ -3,7 +3,7 @@
 // This key is designed to be public. Never paste a secret / service_role key here.
 window.OFFERSHEET_CONFIG = {
   O2I_URL: "https://chebtjqheqnrnjgbixza.supabase.co",
-  O2I_PUBLISHABLE_KEY: "PASTE_PUBLISHABLE_KEY_HERE",
+  O2I_PUBLISHABLE_KEY: "sb_publishable_rmCIzyRjDYjBG7m-0YNndQ_3djYPtTf",
   LOOKUP_URL: "https://chebtjqheqnrnjgbixza.supabase.co/functions/v1/offersheet-lookup",
   DOMAIN: "usawholesalesupplies.com"
 };
