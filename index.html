@@ -146,54 +146,63 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
         SHEET = rows.map(build);
         render(res.j.missing||[]);
         $('dlBtn').disabled = !SHEET.length;
-        $('msg').innerHTML = '<span class="ok">Found '+SHEET.length+' row(s).</span>';
+        var ns=SHEET.filter(function(o){return !o['Store Code'];}).length; var st=SHEET.map(function(o){return o['Store Code'];}).filter(function(x,i,a){return x&&a.indexOf(x)===i;}); $('msg').innerHTML = '<span class="ok">Found '+SHEET.length+' row(s) across '+st.length+' store(s).</span>'+(ns?' <span class="warn">'+ns+' row(s) have no store in o2i.</span>':'');
       })
       .catch(function(e){$('msg').innerHTML='<span class="err">'+e.message+'</span>';})
       .finally(function(){$('goBtn').disabled=false;});
   };
 
   $('dlBtn').onclick = function(){
-    var stores = SHEET.map(function(o){return o['Store Code'];}).filter(function(x,i,a){return x&&a.indexOf(x)===i;});
-    var name = stores.length===1 ? stores[0] : 'MIXED';
     var MONEY = '$#,##0.00;($#,##0.00);-';
     var moneyCols = ['Total Price','Unit Cost','90Days Average','Profit Per Unit','30D Profit'];
     var WIDTHS = [11,16,14,12,12,13,16,11,22,14,14,15,12,9,15,12,24,16];
-    var wb = new ExcelJS.Workbook();
-    var ws = wb.addWorksheet(name.slice(0,31), {views:[{state:'frozen', xSplit:0, ySplit:2}]});
-    ws.columns = HEADERS.map(function(h,i){return {width:WIDTHS[i]};});
     var col = function(h){return HEADERS.indexOf(h)+1;};
     var L = function(h){return String.fromCharCode(64+col(h));};
-    var last = SHEET.length+2;
-    // Row 1: summary (store, total price, weighted ROI)
-    var r1 = ws.getRow(1);
-    r1.getCell(1).value = name;
-    r1.getCell(col('Total Price')).value = {formula:'SUM('+L('Total Price')+'3:'+L('Total Price')+last+')'};
-    r1.getCell(col('Total Price')).numFmt = MONEY;
-    r1.getCell(col('ROI %')).value = {formula:'IFERROR(SUMPRODUCT('+L('Total Price')+'3:'+L('Total Price')+last+','+L('ROI %')+'3:'+L('ROI %')+last+')/SUM('+L('Total Price')+'3:'+L('Total Price')+last+'),"")'};
-    r1.getCell(col('ROI %')).numFmt = '0.0%';
-    [1,col('Total Price'),col('ROI %')].forEach(function(c){r1.getCell(c).font={bold:true};});
-    // Row 2: headers (bold, gray)
-    var r2 = ws.getRow(2);
-    HEADERS.forEach(function(h,i){var c=r2.getCell(i+1);c.value=h;c.font={bold:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}};});
-    // Data rows
-    SHEET.forEach(function(o,k){
-      var row = ws.getRow(k+3);
-      HEADERS.forEach(function(h,i){
-        var c=row.getCell(i+1), v=o[h];
-        c.value = (v===''||v===undefined) ? null : (h==='UPC' ? String(v) : v);
-        if(moneyCols.indexOf(h)>=0) c.numFmt = MONEY;
-        if(h==='ROI %') c.numFmt = '0.0%';
-        if(h==='UPC') c.numFmt = '@';
+    // group rows by store (blank store -> NO_STORE tab)
+    var groups = {}, order = [];
+    SHEET.forEach(function(o){var k=o['Store Code']||'NO_STORE'; if(!groups[k]){groups[k]=[];order.push(k);} groups[k].push(o);});
+    order.sort(function(a,b){return a==='NO_STORE'?1:b==='NO_STORE'?-1:a.localeCompare(b);});
+    var wb = new ExcelJS.Workbook();
+    order.forEach(function(name){
+      var rows = groups[name];
+      var ws = wb.addWorksheet(name.slice(0,31), {views:[{state:'frozen', xSplit:0, ySplit:2}]});
+      ws.columns = HEADERS.map(function(h,i){return {width:WIDTHS[i]};});
+      var last = rows.length+2;
+      // Row 1: summary (store, total price, weighted ROI)
+      var r1 = ws.getRow(1);
+      r1.getCell(1).value = name;
+      r1.getCell(col('Total Price')).value = {formula:'SUM('+L('Total Price')+'3:'+L('Total Price')+last+')'};
+      r1.getCell(col('Total Price')).numFmt = MONEY;
+      r1.getCell(col('ROI %')).value = {formula:'IFERROR(SUMPRODUCT('+L('Total Price')+'3:'+L('Total Price')+last+','+L('ROI %')+'3:'+L('ROI %')+last+')/SUM('+L('Total Price')+'3:'+L('Total Price')+last+'),"")'};
+      r1.getCell(col('ROI %')).numFmt = '0.0%';
+      [1,col('Total Price'),col('ROI %')].forEach(function(c){r1.getCell(c).font={bold:true};});
+      // Row 2: headers (bold, gray)
+      var r2 = ws.getRow(2);
+      HEADERS.forEach(function(h,i){var c=r2.getCell(i+1);c.value=h;c.font={bold:true};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}};});
+      // Data rows
+      rows.forEach(function(o,k){
+        var row = ws.getRow(k+3);
+        HEADERS.forEach(function(h,i){
+          var c=row.getCell(i+1), v=o[h];
+          c.value = (v===''||v===undefined) ? null : (h==='UPC' ? String(v) : v);
+          if(moneyCols.indexOf(h)>=0) c.numFmt = MONEY;
+          if(h==='ROI %') c.numFmt = '0.0%';
+          if(h==='UPC') c.numFmt = '@';
+        });
       });
     });
+    var stores = order.filter(function(x){return x!=='NO_STORE';});
+    var base = order.length===1 ? order[0] : (stores.length<=3 && order.indexOf('NO_STORE')<0 ? stores.join('-') : 'MULTI');
     var d = new Date(), p=function(x){return String(x).padStart(2,'0');};
-    var fname = name+'_Offer_Sheet_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'.xlsx';
+    var fname = base+'_Offer_Sheet_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'.xlsx';
     wb.xlsx.writeBuffer().then(function(buf){
       var url = URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
       var a = document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){URL.revokeObjectURL(url);},2000);
     });
-    if(stores.length>1) $('msg').innerHTML='<span class="warn">Note: codes span '+stores.length+' stores ('+stores.join(', ')+') — saved in one tab named MIXED.</span>';
+    var note = order.length>1 ? 'Saved '+order.length+' tabs: '+order.join(', ')+'.' : 'Saved.';
+    if(groups.NO_STORE) note += ' <b>'+groups.NO_STORE.length+' row(s) have no store in o2i (tab NO_STORE) — fill in Store Code before uploading.</b>';
+    $('msg').innerHTML='<span class="'+(groups.NO_STORE?'warn':'ok')+'">'+note+'</span>';
   };
   $('clearBtn').onclick = function(){ $('codes').value=''; SHEET=[]; $('result').style.display='none'; $('dlBtn').disabled=true; $('msg').textContent=''; };
 })();
