@@ -138,23 +138,33 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     $('result').style.display='block';
   }
 
+  var CHUNK = 200, MAX_CODES = 3000;
+  function lookupChunk(chunk){
+    return fetch(C.LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json','x-user-token':session.access_token},body:JSON.stringify({codes:chunk})})
+      .then(function(r){return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||'Lookup failed'); return j; });});
+  }
   $('goBtn').onclick = function(){
-    var codes = $('codes').value.split(/[\s,;]+/).map(function(s){return s.trim();}).filter(Boolean);
-    codes = codes.filter(function(c,i){return codes.indexOf(c)===i;});
+    var seen = {}, codes = $('codes').value.split(/[\s,;]+/).map(function(s){return s.trim();}).filter(function(c){ if(!c||seen[c]) return false; seen[c]=1; return true; });
     if(!codes.length){$('msg').innerHTML='<span class="err">Paste at least one tracking code.</span>';return;}
-    $('goBtn').disabled=true; $('dlBtn').disabled=true; $('msg').textContent='Looking up '+codes.length+' code(s)…';
-    fetch(C.LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json','x-user-token':session.access_token},body:JSON.stringify({codes:codes})})
-      .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
-      .then(function(res){
-        if(!res.ok) throw new Error(res.j.error||'Lookup failed');
+    if(codes.length>MAX_CODES){$('msg').innerHTML='<span class="err">'+codes.length.toLocaleString()+' codes pasted — the max is '+MAX_CODES.toLocaleString()+' per lookup. Please split them into smaller batches.</span>';return;}
+    $('goBtn').disabled=true; $('dlBtn').disabled=true;
+    var chunks=[]; for(var i=0;i<codes.length;i+=CHUNK) chunks.push(codes.slice(i,i+CHUNK));
+    var allRows=[], allMissing=[], done=0;
+    var progress=function(){ $('msg').textContent='Looking up '+Math.min(done,codes.length).toLocaleString()+' / '+codes.length.toLocaleString()+' code(s)…'; };
+    progress();
+    // one chunk at a time, then combine everything into one list
+    chunks.reduce(function(p,chunk){
+      return p.then(function(){ return lookupChunk(chunk).then(function(j){ allRows=allRows.concat(j.rows||[]); allMissing=allMissing.concat(j.missing||[]); done+=chunk.length; progress(); }); });
+    }, Promise.resolve())
+      .then(function(){
         var order = {}; codes.forEach(function(c,i){order[c]=i;});
-        var rows = res.j.rows.sort(function(a,b){return order[a.tracking_code]-order[b.tracking_code];});
+        var rows = allRows.sort(function(a,b){return order[a.tracking_code]-order[b.tracking_code];});
         SHEET = rows.map(build); SAVED = false;
-        render(res.j.missing||[]);
+        render(allMissing);
         $('dlBtn').disabled = !SHEET.length;
         var ns=SHEET.filter(function(o){return !o['Store Code'];}).length; var st=SHEET.map(function(o){return o['Store Code'];}).filter(function(x,i,a){return x&&a.indexOf(x)===i;}); $('msg').innerHTML = '<span class="ok">Found '+SHEET.length+' row(s) across '+st.length+' store(s).</span>'+(ns?' <span class="warn">'+ns+' row(s) have no store in o2i.</span>':'');
       })
-      .catch(function(e){$('msg').innerHTML='<span class="err">'+e.message+'</span>';})
+      .catch(function(e){ SHEET=[]; $('result').style.display='none'; $('msg').innerHTML='<span class="err">Lookup stopped after '+done.toLocaleString()+' of '+codes.length.toLocaleString()+' codes: '+e.message+' — nothing was downloaded; please try again.</span>';})
       .finally(function(){$('goBtn').disabled=false;});
   };
 
