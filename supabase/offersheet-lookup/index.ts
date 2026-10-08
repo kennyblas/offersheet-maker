@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
   try {
     const raw = await get("raw_info",
-      "tracking_code,asin,brand,upc,unit_price,bundle_size,order_quantity,profit,roi,target_sell_price,distributor_id",
+      "tracking_code,asin,brand,upc,unit_price,bundle_size,order_quantity,profit,roi,target_sell_price,distributor_id,distributor_dc",
       "tracking_code", codes);
     const alloc = await get("product_allocation", "tracking_code,store_id", "tracking_code", codes);
     const stores = await get("store_info", "store_id,store_code", "store_id",
@@ -64,7 +64,12 @@ Deno.serve(async (req) => {
     const rows: unknown[] = [];
     for (const r of raw) {
       const storeCodes = allocBy[r.tracking_code]?.length ? allocBy[r.tracking_code] : [""];
-      for (const sc of storeCodes) rows.push({ ...r, store_code: sc, distributor_name: distById[r.distributor_id] ?? "" });
+      const base = String(distById[r.distributor_id] ?? "").trim();
+      const dc = String(r.distributor_dc ?? "").trim();
+      const squash = (s: string) => s.replace(/\s+/g, "").toUpperCase();
+      // Add the DC (e.g. "Kehe" + "DC27" -> "Kehe DC27") unless the name already contains it.
+      const distName = dc && !squash(base).includes(squash(dc)) ? (base ? base + " " + dc : dc) : base;
+      for (const sc of storeCodes) rows.push({ ...r, store_code: sc, distributor_name: distName });
     }
     const found = new Set(raw.map((r: any) => r.tracking_code));
     return json({ rows, missing: codes.filter((c) => !found.has(c)) }, 200, h);
