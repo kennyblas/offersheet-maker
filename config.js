@@ -5,5 +5,6 @@ window.OFFERSHEET_CONFIG = {
   O2I_URL: "https://chebtjqheqnrnjgbixza.supabase.co",
   O2I_PUBLISHABLE_KEY: "sb_publishable_rmCIzyRjDYjBG7m-0YNndQ_3djYPtTf",
   LOOKUP_URL: "https://chebtjqheqnrnjgbixza.supabase.co/functions/v1/offersheet-lookup",
-  DOMAIN: "usawholesalesupplies.com"
+  DOMAIN: "usawholesalesupplies.com",
+  HISTORY_URL: "https://script.google.com/macros/s/AKfycbz28KbthpyLZ7NzcsOWgTenDknQrGQCEP9aE99B1pxOEp26qwyp_bLaDKg3UxywVctM/exec"
 };
