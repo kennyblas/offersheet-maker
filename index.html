@@ -74,6 +74,7 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
   var HEADERS = ["Store Code","Tracking Code","ASIN","ASIN Eligible","ASIN Desired","Total Price","UPC","Unit Cost",
     "Recommended Sellable Qty","90Days Average","Status","Notes","Bundle Size","ROI %","Profit Per Unit","30D Profit","Brand","Distributor"];
   var SHEET = [];
+  var SAVED = false; // one Drive save per lookup
 
   if(!C.O2I_PUBLISHABLE_KEY || /PASTE/.test(C.O2I_PUBLISHABLE_KEY)){
     $('loginMsg').innerHTML = '<span class="err">Setup needed: paste the o2i publishable key into config.js.</span>';
@@ -148,7 +149,7 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
         if(!res.ok) throw new Error(res.j.error||'Lookup failed');
         var order = {}; codes.forEach(function(c,i){order[c]=i;});
         var rows = res.j.rows.sort(function(a,b){return order[a.tracking_code]-order[b.tracking_code];});
-        SHEET = rows.map(build);
+        SHEET = rows.map(build); SAVED = false;
         render(res.j.missing||[]);
         $('dlBtn').disabled = !SHEET.length;
         var ns=SHEET.filter(function(o){return !o['Store Code'];}).length; var st=SHEET.map(function(o){return o['Store Code'];}).filter(function(x,i,a){return x&&a.indexOf(x)===i;}); $('msg').innerHTML = '<span class="ok">Found '+SHEET.length+' row(s) across '+st.length+' store(s).</span>'+(ns?' <span class="warn">'+ns+' row(s) have no store in o2i.</span>':'');
@@ -222,10 +223,12 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
   function saveToDrive(buf, base, meta){
     var m=$('histMsg');
     if(!histOn()){ m.innerHTML='<span class="warn">History not set up yet (HISTORY_URL in config.js).</span>'; return; }
+    if(SAVED){ m.innerHTML='<span class="ok">Already saved to Drive for this lookup — not saved again.</span>'; return; }
+    SAVED = true;
     m.textContent='Saving to Drive…';
     callHistory({action:'save', base:base, b64:toB64(buf), meta:meta})
-      .then(function(j){ m.innerHTML = j.ok ? '<span class="ok">Saved to Drive: '+j.name+'</span>' : '<span class="err">Drive save failed: '+(j.error||'unknown')+'</span>'; if(j.ok && $('histWrap').style.display!=='none') loadHistory(); })
-      .catch(function(e){ m.innerHTML='<span class="err">Drive save failed: '+e.message+'</span>'; });
+      .then(function(j){ if(!j.ok) SAVED=false; m.innerHTML = j.ok ? '<span class="ok">Saved to Drive: '+j.name+'</span>' : '<span class="err">Drive save failed: '+(j.error||'unknown')+'</span>'; if(j.ok && $('histWrap').style.display!=='none') loadHistory(); })
+      .catch(function(e){ SAVED=false; m.innerHTML='<span class="err">Drive save failed: '+e.message+'</span>'; });
   }
   function esc(s){ return String(s==null?'':s).replace(/[<&"]/g,function(c){return {'<':'&lt;','&':'&amp;','"':'&quot;'}[c];}); }
   function loadHistory(){
@@ -245,7 +248,7 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     }).catch(function(e){ m.innerHTML='<span class="err">Could not load history: '+esc(e.message)+'</span>'; });
   }
   $('histBtn').onclick = loadHistory;
-  $('clearBtn').onclick = function(){ $('codes').value=''; SHEET=[]; $('result').style.display='none'; $('dlBtn').disabled=true; $('msg').textContent=''; };
+  $('clearBtn').onclick = function(){ $('codes').value=''; SHEET=[]; SAVED=false; $('result').style.display='none'; $('dlBtn').disabled=true; $('msg').textContent=''; };
 })();
 </script>
 </body>
