@@ -59,6 +59,11 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
       <p id="missing" class="msg warn"></p>
       <div class="tbl"><table id="tbl"></table></div>
     </div>
+    <div class="card">
+      <div class="row" style="margin-top:0"><b>History</b> <span class="sub">— every download is saved to the team Drive folder</span>
+        <button id="histBtn" class="ghost">Show history</button> <span id="histMsg" class="msg"></span></div>
+      <div class="tbl" id="histWrap" style="display:none;margin-top:10px"><table id="hist"></table></div>
+    </div>
   </div>
 </div>
 
@@ -195,7 +200,10 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     var base = order.length===1 ? order[0] : (stores.length<=3 && order.indexOf('NO_STORE')<0 ? stores.join('-') : 'MULTI');
     var d = new Date(), p=function(x){return String(x).padStart(2,'0');};
     var fname = base+'_Offer_Sheet_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'.xlsx';
+    var meta = {rows:SHEET.length, stores:stores, total:Math.round(SHEET.reduce(function(a,o){return a+(Number(o['Total Price'])||0);},0)*100)/100,
+      codes:SHEET.map(function(o){return o['Tracking Code'];})};
     wb.xlsx.writeBuffer().then(function(buf){
+      saveToDrive(buf, base, meta);
       var url = URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
       var a = document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function(){URL.revokeObjectURL(url);},2000);
@@ -204,6 +212,39 @@ th{position:sticky;top:0;background:#0f1522;color:var(--mute);font-weight:600}
     if(groups.NO_STORE) note += ' <b>'+groups.NO_STORE.length+' row(s) have no store in o2i (tab NO_STORE) — fill in Store Code before uploading.</b>';
     $('msg').innerHTML='<span class="'+(groups.NO_STORE?'warn':'ok')+'">'+note+'</span>';
   };
+  var histOn = function(){ return C.HISTORY_URL && !/PASTE/.test(C.HISTORY_URL); };
+  function callHistory(body){
+    body.token = session && session.access_token; body.key = C.O2I_PUBLISHABLE_KEY;
+    return fetch(C.HISTORY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)})
+      .then(function(r){return r.json();});
+  }
+  function toB64(buf){ var b=new Uint8Array(buf), s='', CH=0x8000; for(var i=0;i<b.length;i+=CH){ s+=String.fromCharCode.apply(null,b.subarray(i,i+CH)); } return btoa(s); }
+  function saveToDrive(buf, base, meta){
+    var m=$('histMsg');
+    if(!histOn()){ m.innerHTML='<span class="warn">History not set up yet (HISTORY_URL in config.js).</span>'; return; }
+    m.textContent='Saving to Drive…';
+    callHistory({action:'save', base:base, b64:toB64(buf), meta:meta})
+      .then(function(j){ m.innerHTML = j.ok ? '<span class="ok">Saved to Drive: '+j.name+'</span>' : '<span class="err">Drive save failed: '+(j.error||'unknown')+'</span>'; if(j.ok && $('histWrap').style.display!=='none') loadHistory(); })
+      .catch(function(e){ m.innerHTML='<span class="err">Drive save failed: '+e.message+'</span>'; });
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[<&"]/g,function(c){return {'<':'&lt;','&':'&amp;','"':'&quot;'}[c];}); }
+  function loadHistory(){
+    var m=$('histMsg');
+    if(!histOn()){ m.innerHTML='<span class="warn">History not set up yet (HISTORY_URL in config.js).</span>'; return; }
+    m.textContent='Loading…';
+    callHistory({action:'list', limit:100}).then(function(j){
+      if(!j.ok) throw new Error(j.error||'failed');
+      var t='<tr><th>Date</th><th>By</th><th>Stores</th><th>Rows</th><th>Total Price</th><th>File</th></tr>';
+      j.files.forEach(function(f){
+        var d=new Date(f.created);
+        t+='<tr><td>'+esc(d.toLocaleString())+'</td><td>'+esc(String(f.by).split('@')[0])+'</td><td>'+esc((f.stores||[]).join(', '))+'</td><td>'+esc(f.rows)+'</td><td>'+(f.total!==''?'$'+Number(f.total).toLocaleString(undefined,{maximumFractionDigits:2}):'')+'</td>'
+          +'<td><a style="color:var(--acc)" href="https://drive.google.com/uc?export=download&id='+encodeURIComponent(f.id)+'">Download</a> · <a style="color:var(--acc)" target="_blank" rel="noopener" href="'+esc(f.url)+'">Open in Drive</a></td></tr>';
+      });
+      $('hist').innerHTML=t; $('histWrap').style.display='block'; $('histBtn').textContent='Refresh history';
+      m.textContent=j.files.length+' saved file(s).';
+    }).catch(function(e){ m.innerHTML='<span class="err">Could not load history: '+esc(e.message)+'</span>'; });
+  }
+  $('histBtn').onclick = loadHistory;
   $('clearBtn').onclick = function(){ $('codes').value=''; SHEET=[]; $('result').style.display='none'; $('dlBtn').disabled=true; $('msg').textContent=''; };
 })();
 </script>
