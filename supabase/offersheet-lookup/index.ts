@@ -4,8 +4,10 @@
 const DOMAIN = "@usawholesalesupplies.com";
 const ALLOWED_ORIGINS = ["https://kennyblas.github.io"];
 const DB_URL = Deno.env.get("SUPABASE_URL")!;
-const DB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+// Dedicated keys (10/26 key rotation): the built-in legacy keys stop working once the
+// project's legacy API keys are disabled. Falls back to the built-ins until the secrets are set.
+const DB_KEY = Deno.env.get("LOOKUP_DB_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("LOOKUP_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
 function cors(origin: string) {
   return {
